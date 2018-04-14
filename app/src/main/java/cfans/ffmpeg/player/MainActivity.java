@@ -1,7 +1,7 @@
 package cfans.ffmpeg.player;
 
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.app.AppCompatActivity;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
@@ -18,6 +18,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         SurfaceView surfaceView = (SurfaceView) findViewById(R.id.surface_view);
         surfaceHolder = surfaceView.getHolder();
         surfaceHolder.addCallback(this);
+
     }
 
     @Override
@@ -25,7 +26,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         new Thread(new Runnable() {
             @Override
             public void run() {
-                CFPlayer.play(surfaceHolder.getSurface(),"mnt/sdcard/RC-Follow/video/test.avi");
+                CFPlayer.playTest(surfaceHolder.getSurface(), "mnt/sdcard/RC-Follow/video/test.avi");
             }
         }).start();
     }

@@ -1,4 +1,3 @@
-//
 // Created by cfans on 10/23/16.
 //
 
@@ -9,15 +8,38 @@
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
 
-
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 
-#include "FFContext.h"
+#include "FFPlayerContext.h"
 
 
+static jfieldID gJNIContext;
 
-JNIEXPORT jint JNICALL Java_cfans_ffmpeg_player_CFPlayer_play(JNIEnv * env, jobject clazz, jobject surface,jstring path){
+static int initPlayer(FFPlayerContext *context,const char * file);
+static void deinitPlayer(FFPlayerContext *context);
+
+int registerPlayer(JNIEnv *env) {
+    jclass clazz;
+    if ((clazz = (*env)->FindClass(env, "cfans/ffmpeg/player/CFPlayer")) == NULL
+        || (gJNIContext = (*env)->GetFieldID(env, clazz, "mContext", "J")) == NULL) {
+        return JNI_ERR;
+    }
+    return JNI_OK;
+}
+
+jint JNI_OnLoad(JavaVM *vm, void *reserved) {
+    JNIEnv *env;
+    if ((*vm)->GetEnv(vm,(void **)&env,JNI_VERSION_1_6) != JNI_OK
+        | registerPlayer(env) < JNI_OK)
+    {
+        return JNI_ERR;
+    }
+    return JNI_VERSION_1_6;
+}
+
+
+JNIEXPORT jint JNICALL Java_cfans_ffmpeg_player_CFPlayer_playTest(JNIEnv * env, jobject clazz, jobject surface,jstring path){
     LOGE("play");
 
     // sd卡中的视频文件地址,可自行修改或者通过jni传入
@@ -45,7 +67,7 @@ JNIEXPORT jint JNICALL Java_cfans_ffmpeg_player_CFPlayer_play(JNIEnv * env, jobj
     // Find the first video stream
     int videoStream = -1, i;
     for (i = 0; i < pFormatCtx->nb_streams; i++) {
-        if (pFormatCtx->streams[i]->codec->codec_type == AVMEDIA_TYPE_VIDEO
+        if (pFormatCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO
            && videoStream < 0) {
             videoStream = i;
         }
@@ -56,8 +78,13 @@ JNIEXPORT jint JNICALL Java_cfans_ffmpeg_player_CFPlayer_play(JNIEnv * env, jobj
     }
 
     // Get a pointer to the codec context for the video stream
-    AVCodecContext  * pCodecCtx = pFormatCtx->streams[videoStream]->codec;
+//    AVCodecContext  * pCodecCtx = pFormatCtx->streams[videoStream]->codec;
 
+    AVCodecContext * pCodecCtx = avcodec_alloc_context3(NULL);
+    if((avcodec_parameters_to_context(pCodecCtx, pFormatCtx->streams[videoStream]->codecpar)) < 0){
+        LOGE("Couldn't find stream information.\n");
+        return  -1;
+    }
     // Find the decoder for the video stream
     AVCodec * pCodec = avcodec_find_decoder(pCodecCtx->codec_id);
     if(pCodec==NULL) {
@@ -81,10 +108,6 @@ JNIEXPORT jint JNICALL Java_cfans_ffmpeg_player_CFPlayer_play(JNIEnv * env, jobj
     ANativeWindow_setBuffersGeometry(nativeWindow,  videoWidth, videoHeight, WINDOW_FORMAT_RGBA_8888);
     ANativeWindow_Buffer windowBuffer;
 
-    if(avcodec_open2(pCodecCtx, pCodec, NULL)<0) {
-        LOGE("Could not open codec.");
-        return -1; // Could not open codec
-    }
 
     // Allocate video frame
     AVFrame * pFrame = av_frame_alloc();
@@ -147,6 +170,7 @@ JNIEXPORT jint JNICALL Java_cfans_ffmpeg_player_CFPlayer_play(JNIEnv * env, jobj
                 }
 
                 ANativeWindow_unlockAndPost(nativeWindow);
+
             }
 
         }
@@ -165,4 +189,125 @@ JNIEXPORT jint JNICALL Java_cfans_ffmpeg_player_CFPlayer_play(JNIEnv * env, jobj
     // Close the video file
     avformat_close_input(&pFormatCtx);
     return 0;
+}
+
+JNIEXPORT jint JNICALL Java_cfans_ffmpeg_player_CFPlayer_init(JNIEnv * env, jobject obj,jobject surface,jstring path) {
+    FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj,gJNIContext);
+    int ret = JNI_FALSE;
+    if (context == NULL){
+        context = (FFPlayerContext *) calloc(1, sizeof(FFPlayerContext));
+        const char *file = (*env)->GetStringUTFChars(env, path, 0);
+        ret = initPlayer(context,file);
+        (*env)->ReleaseStringUTFChars(env, path, file);
+        if(ret >0){
+            context->_nativeWindow = ANativeWindow_fromSurface(env, surface);
+            (*env)->SetLongField(env,obj,gJNIContext,(jlong)context);
+        }else{
+            deinitPlayer(context);
+        }
+    }
+    return  ret;
+
+}
+
+JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_CFPlayer_play(JNIEnv * env, jobject obj) {
+    FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj,gJNIContext);
+    if (context){
+
+    }
+}
+
+JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_CFPlayer_pause(JNIEnv * env, jobject obj) {
+    FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj,gJNIContext);
+    if (context){
+
+    }
+}
+
+JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_CFPlayer_stop(JNIEnv * env, jobject obj) {
+    FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj,gJNIContext);
+    if (context){
+
+    }
+
+}
+JNIEXPORT jboolean JNICALL Java_cfans_ffmpeg_player_CFPlayer_isPlaying(JNIEnv * env, jobject obj) {
+    FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj,gJNIContext);
+    if (context){
+
+    }
+
+    return JNI_TRUE;
+}
+
+
+JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_CFPlayer_seekTo(JNIEnv * env, jobject obj,jint position) {
+    FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj,gJNIContext);
+    if (context){
+//        av_seek_frame(context->_formatCtx, gJNIContext, 100000*vid_time_scale/time_base, AVSEEK_FLAG_BACKWARD);
+    }
+}
+
+JNIEXPORT jint JNICALL Java_cfans_ffmpeg_player_CFPlayer_getDuration(JNIEnv * env, jobject obj) {
+    FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj,gJNIContext);
+    if (context){
+
+    }
+    return JNI_TRUE;
+}
+
+JNIEXPORT jint JNICALL Java_cfans_ffmpeg_player_CFPlayer_getCurrentPosition(JNIEnv * env, jobject obj) {
+    FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj,gJNIContext);
+    if (context){
+
+    }
+    return JNI_TRUE;
+}
+
+
+static int initPlayer(FFPlayerContext *context,const char * file){
+    int ret = JNI_TRUE;
+    av_register_all();
+    AVFormatContext * formatCtx = avformat_alloc_context();
+    context->_formatCtx = formatCtx;
+
+    if((ret = avformat_open_input(&formatCtx, file, NULL, NULL))!=0) {
+        LOGE("Couldn't open file:%s\n", file);
+        deinitPlayer(context);
+        return ret;
+    }
+
+    if((ret=avformat_find_stream_info(formatCtx, NULL))<0) {
+        LOGE("Couldn't find stream information.\n");
+        deinitPlayer(context);
+        return ret;
+    }
+
+    for (int i = 0; i < formatCtx->nb_streams; i++) {
+        if (formatCtx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            context->nb_streams = i;
+            break;
+        }
+    }
+
+    AVCodecContext * codecCtx = avcodec_alloc_context3(NULL);
+    context->_codecCtx =  codecCtx;
+    if((ret = avcodec_parameters_to_context(codecCtx, formatCtx->streams[context->nb_streams]->codecpar)) < 0){
+        LOGE("Couldn't find stream information.\n");
+        deinitPlayer(context);
+        return  ret;
+    }
+
+    av_codec_set_pkt_timebase(codecCtx, formatCtx->streams[context->nb_streams]->time_base);
+    context->_avCodec = avcodec_find_decoder(codecCtx->codec_id);
+    if(context->_avCodec==NULL) {
+        LOGE("Codec not found.\n");
+        deinitPlayer(context);
+        return -1;
+    }
+    return ret;
+}
+
+static void deinitPlayer(FFPlayerContext *context){
+
 }

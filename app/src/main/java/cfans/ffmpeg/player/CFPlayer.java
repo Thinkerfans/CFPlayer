@@ -12,5 +12,19 @@ public class CFPlayer {
     static {
         System.loadLibrary("CFPlayer");
     }
-    public native static int play(Surface surface, String path);
+    public native static int playTest(Surface surface, String path);
+
+    private long mContext;
+
+    public native int init(Surface surface, String path);
+
+    public native void play();
+    public native void pause();
+    public native boolean isPlaying();
+    public native void stop();
+
+    public native int getCurrentPosition();
+    public native int getDuration();
+    public native void seekTo(int position);
+
 }
