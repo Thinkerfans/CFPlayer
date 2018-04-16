@@ -1,8 +1,6 @@
 package cfans.ffmpeg.player;
 
 import android.view.Surface;
-import android.view.SurfaceView;
-
 /**
  * Created by cfans on 2018/4/13.
  */
@@ -12,19 +10,28 @@ public class CFPlayer {
     static {
         System.loadLibrary("CFPlayer");
     }
-    public native static int playTest(Surface surface, String path);
 
     private long mContext;
 
-    public native int init(Surface surface, String path);
+    public CFPlayer(Surface surface){
+        init(surface);
+    }
 
+    public native void init(Surface surface);
+    public native int start(String path);
     public native void play();
     public native void pause();
     public native boolean isPlaying();
     public native void stop();
+    public native void destroy();
 
-    public native int getCurrentPosition();
+    /**
+     * 获取视频总时间：秒数
+     */
     public native int getDuration();
-    public native void seekTo(int position);
+    /**
+     * 指定位置开始播放：秒数
+     */
+    public native void seekTo(int second);
 
 }
