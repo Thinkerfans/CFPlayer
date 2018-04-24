@@ -35,7 +35,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
 
         switch (v.getId()){
             case R.id.bt_start:
-                mPlayer.start("mnt/sdcard/RC-Follow/video/test.mp4");
+                mPlayer.start("mnt/sdcard/RC-Follow/video/test.avi");
                 break;
             case R.id.bt_play:
                 mPlayer.play();
@@ -52,13 +52,6 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
         mPlayer = new CFPlayer(surfaceHolder.getSurface());
-
-//        new Thread(new Runnable() {
-//            @Override
-//            public void run() {
-//                mPlayer.start("mnt/sdcard/RC-Follow/video/test.mp4");
-//            }
-//        }).start();
     }
 
     @Override
@@ -68,6 +61,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
+        mPlayer.destroy();
     }
 
 }

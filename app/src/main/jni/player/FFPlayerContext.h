@@ -29,6 +29,7 @@ typedef struct FFPlayerContext {
     AVCodec * _avCodec;
 
     unsigned int _nb_streams; //视频流编号
+    unsigned int _framerate;// 帧率
     unsigned int _duration;// 视频文件总时长 second
     jboolean _isStarted;//播放线程是否开启
     jboolean _isPause;//是否暂停
