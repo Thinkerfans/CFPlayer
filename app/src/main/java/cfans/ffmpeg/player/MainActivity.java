@@ -24,6 +24,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         findViewById(R.id.bt_stop).setOnClickListener(this);
 
         SurfaceView surfaceView = (SurfaceView) findViewById(R.id.surface_view);
+        surfaceView.setKeepScreenOn(true);
         surfaceHolder = surfaceView.getHolder();
         surfaceHolder.addCallback(this);
 
