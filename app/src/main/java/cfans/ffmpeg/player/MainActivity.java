@@ -17,7 +17,6 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-
         findViewById(R.id.bt_start).setOnClickListener(this);
         findViewById(R.id.bt_pause).setOnClickListener(this);
         findViewById(R.id.bt_play).setOnClickListener(this);
@@ -29,7 +28,6 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         surfaceHolder.addCallback(this);
 
     }
-
 
     @Override
     public void onClick(View v) {
@@ -52,7 +50,8 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        mPlayer = new CFPlayer(surfaceHolder.getSurface());
+        mPlayer = new CFPlayer();
+        mPlayer.init(holder.getSurface());
     }
 
     @Override

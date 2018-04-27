@@ -12,7 +12,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-        <activity android:name=".MainActivity"
+        <activity android:name=".CFPlayerActivity"
             android:configChanges="locale|keyboardHidden|navigation|orientation|screenLayout|screenSize"
             android:screenOrientation="landscape">
             <intent-filter>

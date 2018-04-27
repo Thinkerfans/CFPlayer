@@ -17,6 +17,10 @@
 
 
 static jfieldID gJNIContext;
+static JavaVM *jvm;
+static jmethodID gMethodID;
+
+static void onProgressEvent(FFPlayerContext *context);
 
 static int initPlayer(FFPlayerContext *context, const char *file);
 
@@ -30,6 +34,8 @@ int registerPlayer(JNIEnv *env) {
         || (gJNIContext = (*env)->GetFieldID(env, clazz, "mContext", "J")) == NULL) {
         return JNI_ERR;
     }
+    (*env)->GetJavaVM(env, &jvm);
+    gMethodID = (*env)->GetMethodID(env,clazz,"postProgressFromJNI","(JJ)V");
     return JNI_OK;
 }
 
@@ -50,6 +56,7 @@ Java_cfans_ffmpeg_player_CFPlayer_init(JNIEnv *env, jobject obj, jobject surface
         context = (FFPlayerContext *) calloc(1, sizeof(FFPlayerContext));
         context->_nativeWindow = ANativeWindow_fromSurface(env, surface);
         (*env)->SetLongField(env, obj, gJNIContext, (jlong) context);
+        context->_object = (*env)->NewGlobalRef(env,obj);;
         pthread_mutex_init(&context->_mutex, NULL);
         pthread_cond_init(&context->_cond, NULL);
     }
@@ -110,6 +117,7 @@ JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_CFPlayer_destroy(JNIEnv *env, jo
         pthread_mutex_destroy(&context->_mutex);
         pthread_cond_destroy(&context->_codecCtx);
         (*env)->SetLongField(env, obj, gJNIContext, 0);
+        (*env)->DeleteGlobalRef(env,context->_object);
         ANativeWindow_release(context->_nativeWindow);
         context->_nativeWindow = NULL;
         free(context);
@@ -127,21 +135,40 @@ JNIEXPORT jboolean JNICALL Java_cfans_ffmpeg_player_CFPlayer_isPlaying(JNIEnv *e
 
 
 JNIEXPORT void JNICALL
-Java_cfans_ffmpeg_player_CFPlayer_seekTo(JNIEnv *env, jobject obj, jint second) {
+Java_cfans_ffmpeg_player_CFPlayer_seekTo(JNIEnv *env, jobject obj, jlong millisecond) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context) {
-        av_seek_frame(context->_formatCtx, context->_nb_streams, second /
-                                                                 av_q2d(context->_formatCtx->streams[context->_nb_streams]->time_base),
-                      AVSEEK_FLAG_BACKWARD);
+        context->_current = millisecond*1000;
+        int index = context->_nb_frames * millisecond/(context->_duration/1000);
+        int ret = av_seek_frame(context->_formatCtx, context->_nb_streams, index*context->_frameDuration, AVSEEK_FLAG_ANY);
+        LOGE(" seekTo %lld,ret=%d index=%d,time=%lld ,pos=%lld",context->_current,ret,index,index*context->_frameDuration, millisecond*1000);
     }
 }
 
-JNIEXPORT jint JNICALL Java_cfans_ffmpeg_player_CFPlayer_getDuration(JNIEnv *env, jobject obj) {
+JNIEXPORT jlong JNICALL Java_cfans_ffmpeg_player_CFPlayer_getDuration(JNIEnv *env, jobject obj) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context) {
-        return context->_duration;
+        return context->_duration/1000;
     }
     return JNI_FALSE;
+}
+
+JNIEXPORT jlong JNICALL Java_cfans_ffmpeg_player_CFPlayer_getCurrentPosition(JNIEnv *env, jobject obj) {
+    FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
+    if (context) {
+        return context->_current/1000;
+    }
+    return JNI_FALSE;
+}
+
+
+static void onProgressEvent(FFPlayerContext *context){
+    JNIEnv* env = NULL;
+    if ((*jvm)->AttachCurrentThread(jvm, &env, NULL) < 0) {
+        return;
+    }
+    (*env)->CallVoidMethod(env, context->_object, gMethodID,context->_current/1000 ,context->_duration/1000);
+    (*jvm)->DetachCurrentThread(jvm);
 }
 
 static void *playerThread(void *arg) {
@@ -174,11 +201,15 @@ static void *playerThread(void *arg) {
     int frameFinished;
     AVPacket packet;
     pthread_mutex_lock(&context->_mutex);
-    int interval = 1000000 / context->_framerate;//微秒
+    const int frameInterval = 1000000 / context->_frameRate;//微秒
     int delay;
+    int decodeInterval;
+    int timeInterval;
+
     struct timeval tvs, tve;
+    int frame = 0;
     LOGE(" playerThread begin %p ,[%dX%d],frame=%d,interval=%d", context, width, height,
-         context->_framerate, interval);
+         context->_frameRate, frameInterval);
 
     while (context->_isStarted) {
 
@@ -187,10 +218,13 @@ static void *playerThread(void *arg) {
         } else {
             gettimeofday(&tvs, NULL);
             if (av_read_frame(pFormatCtx, &packet) >= 0) {
+                frame++;
                 if (packet.stream_index == context->_nb_streams) {
                     avcodec_decode_video2(pCodecCtx, pFrame, &frameFinished, &packet);
 
                     if (frameFinished) {
+                        LOGE(" packet:  %lld, %lld,%lld", packet.dts,packet.duration,pFrame->pkt_duration);
+
                         ANativeWindow_lock(context->_nativeWindow, &windowBuffer, 0);
 
                         sws_scale(sws_ctx, (uint8_t const *const *) pFrame->data,
@@ -207,18 +241,31 @@ static void *playerThread(void *arg) {
                             memcpy(dst + h * dstStride, src + h * srcStride, srcStride);
                         }
                         ANativeWindow_unlockAndPost(context->_nativeWindow);
-                        gettimeofday(&tve, NULL);
-                        delay = interval -
-                                ((tve.tv_sec - tvs.tv_sec) * 1000000 + (tve.tv_usec - tvs.tv_usec));
-                        if (delay > 0) {
-                            usleep(delay);
-                        }
+                    }
+
+                    gettimeofday(&tve, NULL);
+                    decodeInterval = (tve.tv_sec - tvs.tv_sec) * AV_TIME_BASE + (tve.tv_usec - tvs.tv_usec);
+                    delay = frameInterval - decodeInterval;
+                    if (delay > 0) {
+                        usleep(delay);
+                        context->_current += frameInterval;
+                        timeInterval += frameInterval;
+                    }else{
+                        context->_current += decodeInterval;
+                        timeInterval += decodeInterval;
+                    }
+                    if (timeInterval > AV_TIME_BASE){
+                        timeInterval = 0;
+                        onProgressEvent(context);
                     }
                 }
                 av_packet_unref(&packet);
             } else {
+                context->_current = 0;
                 av_seek_frame(context->_formatCtx, context->_nb_streams, 0, AVSEEK_FLAG_BACKWARD);
                 context->_isPause = JNI_TRUE;
+                LOGE("playerThread end %d",frame);
+
             }
         }
     }
@@ -228,7 +275,7 @@ static void *playerThread(void *arg) {
     av_free(pFrame);
 
     deinitPlayer(context);
-    LOGE("playerThread end ");
+    LOGE("playerThread end %d",frame);
 }
 
 static int initPlayer(FFPlayerContext *context, const char *file) {
@@ -277,10 +324,16 @@ static int initPlayer(FFPlayerContext *context, const char *file) {
         deinitPlayer(context);
     }
 
-    context->_framerate = stream->r_frame_rate.num / stream->r_frame_rate.den;
-    context->_duration = (unsigned int) (formatCtx->duration + 5000) / AV_TIME_BASE;
+    context->_nb_frames = stream->nb_frames;
+    context->_frameRate = stream->r_frame_rate.num / stream->r_frame_rate.den;
+    context->_frameDuration = codecCtx->pkt_timebase.den/context->_frameRate;
+    context->_duration = formatCtx->duration;
+    context->_current = 0;
 
-    LOGE("initPlayer framerate=%d, duration=%d (s) \n", context->_framerate, context->_duration);
+
+    LOGE("initPlayer frames=%lld frameRate=%d,frameDuration=%d, duration=%lld (s) \n",stream->nb_frames, context->_frameRate,context->_frameDuration, context->_duration/AV_TIME_BASE);
+    LOGE("initPlayer  tickets =%d (s) ,tickets =%d (s)\n", stream->time_base.num,stream->time_base.den);
+    LOGE("initPlayer  tickets =%d (s) ,tickets =%d (s)\n", codecCtx->pkt_timebase.num,codecCtx->pkt_timebase.den);
 
     return ret;
 }

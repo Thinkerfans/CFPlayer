@@ -48,6 +48,4 @@
             android:layout_weight="1.0"
             android:text="Stop" />
     </LinearLayout>
-
-
 </RelativeLayout>
