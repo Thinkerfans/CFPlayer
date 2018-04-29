@@ -254,10 +254,12 @@ static void *playerThread(void *arg) {
                         context->_current += decodeInterval;
                         timeInterval += decodeInterval;
                     }
+
                     if (timeInterval > AV_TIME_BASE){
                         timeInterval = 0;
                         onProgressEvent(context);
                     }
+
                 }
                 av_packet_unref(&packet);
             } else {
