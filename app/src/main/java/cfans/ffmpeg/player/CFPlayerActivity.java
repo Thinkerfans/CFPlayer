@@ -4,7 +4,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
@@ -19,6 +18,8 @@ import android.widget.TextView;
  */
 
 public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder.Callback , View.OnClickListener{
+
+    private static final int FADE_DELAY = 5000;
 
     private static final int SHOW_PROGRESS = 0;
     private static final int FADE_OUT = 1;
@@ -45,7 +46,6 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
         mPlayer = new SilentPlayer();
         mPlayer.setHandler(mHandler);
         initViews();
-        mShowing = true;
     }
 
     @Override
@@ -57,6 +57,13 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
                     onVideoPause();
                 }else{
                     onVideoPlay();
+                }
+                break;
+            case R.id.surface_view:
+                if (mShowing){
+                    hide();
+                }else{
+                    show();
                 }
                 break;
                 default:
@@ -78,11 +85,14 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
         mSurfaceView  = (SurfaceView) findViewById(R.id.surface_view);
         mSurfaceView.setKeepScreenOn(true);
         mSurfaceView.getHolder().addCallback(this);
+        mSurfaceView.setOnClickListener(this);
 
         mController = findViewById(R.id.layout_controller);
         mPlayPause = (ImageView)findViewById(R.id.controller_play_pause);
         mTvDuration = (TextView) findViewById(R.id.controller_time_total);
         mTvTime = (TextView)findViewById(R.id.controller_time_current);
+        mController.setVisibility(View.GONE);
+        mShowing = false;
 
         mProgress = (SeekBar)findViewById(R.id.controller_seekbar);
         mProgress.setOnSeekBarChangeListener(mSeekListener);
@@ -123,24 +133,32 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
     private Handler mHandler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
-            long pos;
             switch (msg.what) {
                 case FADE_OUT:
-//                    hide();
+                    hide();
                     break;
                 case SHOW_PROGRESS:
                     if (!mDragging && mShowing) {
                         mProgress.setProgress(msg.arg1);
                         updateProgressText(msg.arg1);
                         if (msg.arg1 == mProgress.getMax()){
-                            onVideoPause();
+                            mPlayPause.setImageResource(R.drawable.videocontroller_play);
                         }
                     }
-
                     break;
             }
         }
     };
+
+    private void show(){
+        mShowing = true;
+        mController.setVisibility(View.VISIBLE);
+        mHandler.sendEmptyMessageDelayed(FADE_OUT,FADE_DELAY);
+    }
+    private void hide(){
+        mShowing = false;
+        mController.setVisibility(View.GONE);
+    }
 
     private void updateProgressText(int progress){
         String time = generateTime((mDuration * progress) / 1000);
@@ -150,6 +168,7 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
     private SeekBar.OnSeekBarChangeListener mSeekListener = new SeekBar.OnSeekBarChangeListener() {
         public void onStartTrackingTouch(SeekBar bar) {
             mDragging = true;
+            mHandler.removeMessages(FADE_OUT);
         }
 
         public void onProgressChanged(SeekBar bar, int progress, boolean fromuser) {
@@ -159,6 +178,7 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
         }
 
         public void onStopTrackingTouch(SeekBar bar) {
+            mHandler.sendEmptyMessageDelayed(FADE_OUT,FADE_DELAY);
             mPlayer.seekTo(bar.getProgress());
             mDragging = false;
         }
