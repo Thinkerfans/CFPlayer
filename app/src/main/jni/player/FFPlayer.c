@@ -226,8 +226,8 @@ static void *playerThread(void *arg) {
             if (av_read_frame(pFormatCtx, &packet) >= 0) {
                 if (packet.stream_index == context->_nb_streams) {
                     if (avcodec_send_packet(pCodecCtx, &packet) == 0) {
+                        context->_frameCurrent++;
                         while (avcodec_receive_frame(pCodecCtx, pFrame) == 0) {
-                            context->_frameCurrent++;
                             ANativeWindow_lock(context->_nativeWindow, &windowBuffer, 0);
                             sws_scale(sws_ctx, (uint8_t const *const *) pFrame->data,
                                       pFrame->linesize, 0, pCodecCtx->height,
@@ -344,9 +344,9 @@ static int initPlayer(FFPlayerContext *context, const char *file) {
     context->_duration = formatCtx->duration;
     context->_frameCurrent = 0;
 
-//    LOGE("initPlayer frames=%lld frameRate=%d,frameDuration=%d(us), duration=%lld (s) \n",
-//         stream->nb_frames, context->_frameRate, context->_frameDuration,
-//         context->_duration / AV_TIME_BASE);
+    LOGE("initPlayer frames=%lld frameRate=%d,frameDuration=%d(us), duration=%lld (s) \n",
+         stream->nb_frames, context->_frameRate, context->_frameDuration,
+         context->_duration / AV_TIME_BASE);
 //    LOGE("initPlayer  tickets =%d (s) ,tickets =%d (s),codec id=%d\n", stream->time_base.num,
 //         stream->time_base.den,stream->codecpar->codec_id);
 //    LOGE("initPlayer  tickets =%d (s) ,tickets =%d (s)\n", codecCtx->pkt_timebase.num,
