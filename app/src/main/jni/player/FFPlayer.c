@@ -10,6 +10,7 @@
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
+#include <libavcodec/jni.h>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 
@@ -17,7 +18,6 @@
 
 
 static jfieldID gJNIContext;
-static JavaVM *jvm;
 static jmethodID gMethodID;
 
 static void onProgressEvent(FFPlayerContext *context);
@@ -30,11 +30,10 @@ static void *playerThread(void *arg);
 
 int registerPlayer(JNIEnv *env) {
     jclass clazz;
-    if ((clazz = (*env)->FindClass(env, "cfans/ffmpeg/player/CFPlayer")) == NULL
+    if ((clazz = (*env)->FindClass(env, "cfans/ffmpeg/player/SilentPlayer")) == NULL
         || (gJNIContext = (*env)->GetFieldID(env, clazz, "mContext", "J")) == NULL) {
         return JNI_ERR;
     }
-    (*env)->GetJavaVM(env, &jvm);
     gMethodID = (*env)->GetMethodID(env, clazz, "postProgressFromJNI", "(JJ)V");
     return JNI_OK;
 }
@@ -45,12 +44,13 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved) {
         | registerPlayer(env) < JNI_OK) {
         return JNI_ERR;
     }
+    av_jni_set_java_vm(vm, NULL);
     return JNI_VERSION_1_6;
 }
 
 
 JNIEXPORT void JNICALL
-Java_cfans_ffmpeg_player_CFPlayer_init(JNIEnv *env, jobject obj, jobject surface) {
+Java_cfans_ffmpeg_player_SilentPlayer_init(JNIEnv *env, jobject obj, jobject surface) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context == NULL) {
         context = (FFPlayerContext *) calloc(1, sizeof(FFPlayerContext));
@@ -65,7 +65,7 @@ Java_cfans_ffmpeg_player_CFPlayer_init(JNIEnv *env, jobject obj, jobject surface
 
 
 JNIEXPORT jint JNICALL
-Java_cfans_ffmpeg_player_CFPlayer_start(JNIEnv *env, jobject obj, jstring path) {
+Java_cfans_ffmpeg_player_SilentPlayer_start(JNIEnv *env, jobject obj, jstring path) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     int ret = JNI_FALSE;
     if (context && !context->_isStarted) {
@@ -80,11 +80,10 @@ Java_cfans_ffmpeg_player_CFPlayer_start(JNIEnv *env, jobject obj, jstring path) 
             deinitPlayer(context);
         }
     }
-
     return ret;
 }
 
-JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_CFPlayer_play(JNIEnv *env, jobject obj) {
+JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_SilentPlayer_play(JNIEnv *env, jobject obj) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context && context->_isPause) {
         context->_isPause = JNI_FALSE;
@@ -93,7 +92,7 @@ JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_CFPlayer_play(JNIEnv *env, jobje
     }
 }
 
-JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_CFPlayer_pause(JNIEnv *env, jobject obj) {
+JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_SilentPlayer_pause(JNIEnv *env, jobject obj) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context && !context->_isPause) {
         context->_isPause = JNI_TRUE;
@@ -102,7 +101,7 @@ JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_CFPlayer_pause(JNIEnv *env, jobj
     }
 }
 
-JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_CFPlayer_stop(JNIEnv *env, jobject obj) {
+JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_SilentPlayer_stop(JNIEnv *env, jobject obj) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context) {
         context->_isStarted = JNI_FALSE;
@@ -111,7 +110,7 @@ JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_CFPlayer_stop(JNIEnv *env, jobje
     }
 }
 
-JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_CFPlayer_destroy(JNIEnv *env, jobject obj) {
+JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_SilentPlayer_destroy(JNIEnv *env, jobject obj) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context) {
         pthread_mutex_destroy(&context->_mutex);
@@ -125,7 +124,7 @@ JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_CFPlayer_destroy(JNIEnv *env, jo
     }
 }
 
-JNIEXPORT jboolean JNICALL Java_cfans_ffmpeg_player_CFPlayer_isPlaying(JNIEnv *env, jobject obj) {
+JNIEXPORT jboolean JNICALL Java_cfans_ffmpeg_player_SilentPlayer_isPlaying(JNIEnv *env, jobject obj) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context) {
         return !context->_isPause;
@@ -135,19 +134,17 @@ JNIEXPORT jboolean JNICALL Java_cfans_ffmpeg_player_CFPlayer_isPlaying(JNIEnv *e
 
 
 JNIEXPORT void JNICALL
-Java_cfans_ffmpeg_player_CFPlayer_seekTo(JNIEnv *env, jobject obj, jlong millisecond) {
+Java_cfans_ffmpeg_player_SilentPlayer_seekTo(JNIEnv *env, jobject obj, jlong index) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context) {
-        context->_current = millisecond * 1000;
-        int index = context->_nb_frames * millisecond / (context->_duration / 1000);
+        context->_frameCurrent = context->_nb_frames * index / 1000;
         int ret = av_seek_frame(context->_formatCtx, context->_nb_streams,
-                                index * context->_frameDuration, AVSEEK_FLAG_ANY);
-        LOGE(" seekTo %lld,ret=%d index=%d,time=%lld ,pos=%lld", context->_current, ret, index,
-             index * context->_frameDuration, millisecond * 1000);
+                                context->_frameCurrent * context->_frameDuration, AVSEEK_FLAG_ANY);
+        LOGE(" seekTo index=%d,time=%lld ,ret=%d", context->_frameCurrent, ret, context->_frameCurrent * context->_frameDuration, ret);
     }
 }
 
-JNIEXPORT jlong JNICALL Java_cfans_ffmpeg_player_CFPlayer_getDuration(JNIEnv *env, jobject obj) {
+JNIEXPORT jlong JNICALL Java_cfans_ffmpeg_player_SilentPlayer_getDuration(JNIEnv *env, jobject obj) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context) {
         return context->_duration / 1000;
@@ -156,10 +153,10 @@ JNIEXPORT jlong JNICALL Java_cfans_ffmpeg_player_CFPlayer_getDuration(JNIEnv *en
 }
 
 JNIEXPORT jlong JNICALL
-Java_cfans_ffmpeg_player_CFPlayer_getCurrentPosition(JNIEnv *env, jobject obj) {
+Java_cfans_ffmpeg_player_SilentPlayer_getCurrentPosition(JNIEnv *env, jobject obj) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context) {
-        return context->_current / 1000;
+        return context->_duration*context->_frameCurrent/context->_nb_frames / 1000;
     }
     return JNI_FALSE;
 }
@@ -167,12 +164,19 @@ Java_cfans_ffmpeg_player_CFPlayer_getCurrentPosition(JNIEnv *env, jobject obj) {
 
 static void onProgressEvent(FFPlayerContext *context) {
     JNIEnv *env = NULL;
-    if ((*jvm)->AttachCurrentThread(jvm, &env, NULL) < 0) {
-        return;
+    JavaVM *jvm = av_jni_get_java_vm(NULL);
+    if((*jvm)->GetEnv(jvm,(void **)&env, JNI_VERSION_1_6) >= 0){
+        (*env)->CallVoidMethod(env, context->_object, gMethodID, context->_frameCurrent,
+                               context->_nb_frames);
+    }else{
+        if ((*jvm)->AttachCurrentThread(jvm, &env, NULL) < 0) {
+            return;
+        }
+        (*env)->CallVoidMethod(env, context->_object, gMethodID, context->_frameCurrent,
+                               context->_nb_frames);
+        (*jvm)->DetachCurrentThread(jvm);
     }
-    (*env)->CallVoidMethod(env, context->_object, gMethodID, context->_current / 1000,
-                           context->_duration / 1000);
-    (*jvm)->DetachCurrentThread(jvm);
+
 }
 
 static void *playerThread(void *arg) {
@@ -198,7 +202,7 @@ static void *playerThread(void *arg) {
                                                 width,
                                                 height,
                                                 AV_PIX_FMT_RGBA,
-                                                SWS_BILINEAR,
+                                                SWS_FAST_BILINEAR,
                                                 NULL,
                                                 NULL,
                                                 NULL);
@@ -210,7 +214,6 @@ static void *playerThread(void *arg) {
     int timeInterval;
 
     struct timeval tvs, tve;
-    int frame = 0;
     LOGE(" playerThread begin %p ,[%dX%d],frame=%d,interval=%d", context, width, height,
          context->_frameRate, frameInterval);
 
@@ -221,13 +224,11 @@ static void *playerThread(void *arg) {
         } else {
             gettimeofday(&tvs, NULL);
             if (av_read_frame(pFormatCtx, &packet) >= 0) {
-                frame++;
                 if (packet.stream_index == context->_nb_streams) {
-//                    avcodec_decode_video2(pCodecCtx, pFrame, &frameFinished, &packet);
                     if (avcodec_send_packet(pCodecCtx, &packet) == 0) {
                         while (avcodec_receive_frame(pCodecCtx, pFrame) == 0) {
+                            context->_frameCurrent++;
                             ANativeWindow_lock(context->_nativeWindow, &windowBuffer, 0);
-
                             sws_scale(sws_ctx, (uint8_t const *const *) pFrame->data,
                                       pFrame->linesize, 0, pCodecCtx->height,
                                       pFrameRGBA->data, pFrameRGBA->linesize);
@@ -244,19 +245,18 @@ static void *playerThread(void *arg) {
                             ANativeWindow_unlockAndPost(context->_nativeWindow);
                         }
                     }
+
                     gettimeofday(&tve, NULL);
                     decodeInterval =
                             (tve.tv_sec - tvs.tv_sec) * AV_TIME_BASE + (tve.tv_usec - tvs.tv_usec);
-                    LOGE(" packet:  %lld, %lld,%lld,decode time:%d", packet.dts, packet.duration,
-                         pFrame->pkt_duration, decodeInterval);
+//                    LOGE(" packet:  %lld, %lld,%lld,decode time:%d", packet.dts, packet.duration,
+//                         packet.pos, decodeInterval);
 
                     delay = frameInterval - decodeInterval;
                     if (delay > 0) {
                         usleep(delay);
-                        context->_current += frameInterval;
                         timeInterval += frameInterval;
                     } else {
-                        context->_current += decodeInterval;
                         timeInterval += decodeInterval;
                     }
 
@@ -268,11 +268,10 @@ static void *playerThread(void *arg) {
                 }
                 av_packet_unref(&packet);
             } else {
-                context->_current = 0;
+                onProgressEvent(context);
+                context->_frameCurrent = 0;
                 av_seek_frame(context->_formatCtx, context->_nb_streams, 0, AVSEEK_FLAG_BACKWARD);
                 context->_isPause = JNI_TRUE;
-                LOGE("playerThread end %d", frame);
-
             }
         }
     }
@@ -282,7 +281,7 @@ static void *playerThread(void *arg) {
     av_free(pFrame);
 
     deinitPlayer(context);
-    LOGE("playerThread end %d", frame);
+    LOGE("playerThread end");
 }
 
 static int initPlayer(FFPlayerContext *context, const char *file) {
@@ -310,7 +309,14 @@ static int initPlayer(FFPlayerContext *context, const char *file) {
         }
     }
     AVStream *stream = formatCtx->streams[context->_nb_streams];
-    context->_avCodec = avcodec_find_decoder(stream->codecpar->codec_id);
+
+    if (stream->codecpar->codec_id == AV_CODEC_ID_H264){
+        context->_avCodec = avcodec_find_decoder_by_name("h264_mediacodec");
+        LOGE("use media codec id=%d\n", stream->codecpar->codec_id);
+    }else {
+        context->_avCodec = avcodec_find_decoder(stream->codecpar->codec_id);
+        LOGE("use ffmpeg codec id=%d\n", stream->codecpar->codec_id);
+    }
     if (context->_avCodec == NULL) {
         LOGE("avcodec_find_decoder error. \n");
         deinitPlayer(context);
@@ -329,22 +335,22 @@ static int initPlayer(FFPlayerContext *context, const char *file) {
     if ((ret = avcodec_open2(codecCtx, context->_avCodec, NULL)) < 0) {
         LOGE("avcodec_open2 error= %d \n", ret);
         deinitPlayer(context);
+        return ret;
     }
 
     context->_nb_frames = stream->nb_frames;
     context->_frameRate = stream->r_frame_rate.num / stream->r_frame_rate.den;
-    context->_frameDuration = codecCtx->pkt_timebase.den / context->_frameRate;
+    context->_frameDuration = stream->time_base.den / context->_frameRate;
     context->_duration = formatCtx->duration;
-    context->_current = 0;
+    context->_frameCurrent = 0;
 
-
-    LOGE("initPlayer frames=%lld frameRate=%d,frameDuration=%d, duration=%lld (s) \n",
-         stream->nb_frames, context->_frameRate, context->_frameDuration,
-         context->_duration / AV_TIME_BASE);
-    LOGE("initPlayer  tickets =%d (s) ,tickets =%d (s)\n", stream->time_base.num,
-         stream->time_base.den);
-    LOGE("initPlayer  tickets =%d (s) ,tickets =%d (s)\n", codecCtx->pkt_timebase.num,
-         codecCtx->pkt_timebase.den);
+//    LOGE("initPlayer frames=%lld frameRate=%d,frameDuration=%d(us), duration=%lld (s) \n",
+//         stream->nb_frames, context->_frameRate, context->_frameDuration,
+//         context->_duration / AV_TIME_BASE);
+//    LOGE("initPlayer  tickets =%d (s) ,tickets =%d (s),codec id=%d\n", stream->time_base.num,
+//         stream->time_base.den,stream->codecpar->codec_id);
+//    LOGE("initPlayer  tickets =%d (s) ,tickets =%d (s)\n", codecCtx->pkt_timebase.num,
+//         codecCtx->pkt_timebase.den);
 
     return ret;
 }

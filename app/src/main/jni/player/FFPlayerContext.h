@@ -34,8 +34,9 @@ typedef struct FFPlayerContext {
     unsigned int _frameDuration;// 每帧播放时间
 
     int64_t _nb_frames;// 视频总帧数
+    int64_t _frameCurrent;// 当前播放的帧索引
+
     int64_t _duration;// 视频文件总时长 微秒
-    int64_t _current;// 播放当前位置 微秒
     jboolean _isStarted;//播放线程是否开启
     jboolean _isPause;//是否暂停
 

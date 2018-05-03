@@ -10,7 +10,7 @@ include_directories(ffmpeg/include)
 link_directories(ffmpeg/lib)
 
 add_library( # Sets the name of the library.
-                 CFPlayer
+                 SilentPlayer
 
                  # Sets the library as a shared library.
                  SHARED
@@ -21,10 +21,10 @@ add_library( # Sets the name of the library.
                  src/main/jni/player/FFPlayer.c
                  )
 
-target_include_directories(CFPlayer PRIVATE
+target_include_directories(SilentPlayer PRIVATE
                            src/main/jni)
 
-target_link_libraries( CFPlayer
+target_link_libraries( SilentPlayer
 
                        libswscale.a
                        libavformat.a

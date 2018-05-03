@@ -10,7 +10,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
 
     SurfaceHolder surfaceHolder;
 
-    CFPlayer mPlayer;
+    SilentPlayer mPlayer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -50,7 +50,7 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
-        mPlayer = new CFPlayer();
+        mPlayer = new SilentPlayer();
         mPlayer.init(holder.getSurface());
     }
 

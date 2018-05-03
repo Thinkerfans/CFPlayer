@@ -8,10 +8,10 @@ import android.view.Surface;
  * Created by cfans on 2018/4/13.
  */
 
-public class CFPlayer {
+public class SilentPlayer {
 
     static {
-        System.loadLibrary("CFPlayer");
+        System.loadLibrary("SilentPlayer");
     }
 
     private long mContext;
@@ -35,18 +35,18 @@ public class CFPlayer {
      */
     public native long getCurrentPosition();
     /**
-     * 指定位置开始播放：毫秒数
+     * 指定位置开始播放：帧序列
      */
-    public native void seekTo(long millisecond);
+    public native void seekTo(long index);
 
     /**
      * JNI回调进度，大约每秒回调一次
      */
-    public void postProgressFromJNI(long current, long duration) {
-        Log.e(" postProgressFromJNI: ","current:"+current+" duration: "+duration);
+    public void postProgressFromJNI(long index, long total) {
+        Log.e(" postProgressFromJNI: ","current frame:"+index+" total frame: "+total);
         if (mHandler != null){
             Message msg =  mHandler.obtainMessage();
-            msg.arg1 = (int)(1000*current/duration);
+            msg.arg1 = (int)(1000*index/total);
             mHandler.sendMessage(msg);
         }
     }

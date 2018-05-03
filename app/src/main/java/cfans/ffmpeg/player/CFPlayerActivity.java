@@ -4,6 +4,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
@@ -24,7 +25,7 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
     public final static String EXTRA_PATH = "path";
 
     SurfaceView mSurfaceView;
-    CFPlayer mPlayer;
+    SilentPlayer mPlayer;
 
     View mController;
     ImageView mPlayPause;
@@ -41,7 +42,7 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
         setContentView(R.layout.activity_vplayer);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        mPlayer = new CFPlayer();
+        mPlayer = new SilentPlayer();
         mPlayer.setHandler(mHandler);
         initViews();
         mShowing = true;
@@ -131,7 +132,11 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
                     if (!mDragging && mShowing) {
                         mProgress.setProgress(msg.arg1);
                         updateProgressText(msg.arg1);
+                        if (msg.arg1 == mProgress.getMax()){
+                            onVideoPause();
+                        }
                     }
+
                     break;
             }
         }
@@ -148,13 +153,13 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
         }
 
         public void onProgressChanged(SeekBar bar, int progress, boolean fromuser) {
-            if (!fromuser)
-                return;
-            updateProgressText(progress);
+            if (fromuser) {
+                updateProgressText(progress);
+            }
         }
 
         public void onStopTrackingTouch(SeekBar bar) {
-            mPlayer.seekTo((mDuration * bar.getProgress()) / 1000);
+            mPlayer.seekTo(bar.getProgress());
             mDragging = false;
         }
     };
