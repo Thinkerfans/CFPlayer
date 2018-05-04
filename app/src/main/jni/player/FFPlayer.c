@@ -35,6 +35,9 @@ int registerPlayer(JNIEnv *env) {
         return JNI_ERR;
     }
     gMethodID = (*env)->GetMethodID(env, clazz, "postProgressFromJNI", "(JJ)V");
+    JavaVM *jvm;
+    (*env)->GetJavaVM(env, &jvm);
+    av_jni_set_java_vm(jvm, NULL);
     return JNI_OK;
 }
 
@@ -44,7 +47,7 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved) {
         | registerPlayer(env) < JNI_OK) {
         return JNI_ERR;
     }
-    av_jni_set_java_vm(vm, NULL);
+//    av_jni_set_java_vm(vm, NULL);
     return JNI_VERSION_1_6;
 }
 
@@ -124,7 +127,8 @@ JNIEXPORT void JNICALL Java_cfans_ffmpeg_player_SilentPlayer_destroy(JNIEnv *env
     }
 }
 
-JNIEXPORT jboolean JNICALL Java_cfans_ffmpeg_player_SilentPlayer_isPlaying(JNIEnv *env, jobject obj) {
+JNIEXPORT jboolean JNICALL
+Java_cfans_ffmpeg_player_SilentPlayer_isPlaying(JNIEnv *env, jobject obj) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context) {
         return !context->_isPause;
@@ -140,11 +144,13 @@ Java_cfans_ffmpeg_player_SilentPlayer_seekTo(JNIEnv *env, jobject obj, jlong ind
         context->_frameCurrent = context->_nb_frames * index / 1000;
         int ret = av_seek_frame(context->_formatCtx, context->_nb_streams,
                                 context->_frameCurrent * context->_frameDuration, AVSEEK_FLAG_ANY);
-        LOGE(" seekTo index=%d,time=%lld ,ret=%d", context->_frameCurrent, ret, context->_frameCurrent * context->_frameDuration, ret);
+        LOGE(" seekTo index=%d,time=%lld ,ret=%d", context->_frameCurrent, ret,
+             context->_frameCurrent * context->_frameDuration, ret);
     }
 }
 
-JNIEXPORT jlong JNICALL Java_cfans_ffmpeg_player_SilentPlayer_getDuration(JNIEnv *env, jobject obj) {
+JNIEXPORT jlong JNICALL
+Java_cfans_ffmpeg_player_SilentPlayer_getDuration(JNIEnv *env, jobject obj) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context) {
         return context->_duration / 1000;
@@ -156,7 +162,7 @@ JNIEXPORT jlong JNICALL
 Java_cfans_ffmpeg_player_SilentPlayer_getCurrentPosition(JNIEnv *env, jobject obj) {
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context) {
-        return context->_duration*context->_frameCurrent/context->_nb_frames / 1000;
+        return context->_duration * context->_frameCurrent / context->_nb_frames / 1000;
     }
     return JNI_FALSE;
 }
@@ -165,10 +171,10 @@ Java_cfans_ffmpeg_player_SilentPlayer_getCurrentPosition(JNIEnv *env, jobject ob
 static void onProgressEvent(FFPlayerContext *context) {
     JNIEnv *env = NULL;
     JavaVM *jvm = av_jni_get_java_vm(NULL);
-    if((*jvm)->GetEnv(jvm,(void **)&env, JNI_VERSION_1_6) >= 0){
+    if ((*jvm)->GetEnv(jvm, (void **) &env, JNI_VERSION_1_6) >= 0) {
         (*env)->CallVoidMethod(env, context->_object, gMethodID, context->_frameCurrent,
                                context->_nb_frames);
-    }else{
+    } else {
         if ((*jvm)->AttachCurrentThread(jvm, &env, NULL) < 0) {
             return;
         }
@@ -310,10 +316,10 @@ static int initPlayer(FFPlayerContext *context, const char *file) {
     }
     AVStream *stream = formatCtx->streams[context->_nb_streams];
 
-    if (stream->codecpar->codec_id == AV_CODEC_ID_H264){
+    if (stream->codecpar->codec_id == AV_CODEC_ID_H264) {
         context->_avCodec = avcodec_find_decoder_by_name("h264_mediacodec");
         LOGE("use media codec id=%d\n", stream->codecpar->codec_id);
-    }else {
+    } else {
         context->_avCodec = avcodec_find_decoder(stream->codecpar->codec_id);
         LOGE("use ffmpeg codec id=%d\n", stream->codecpar->codec_id);
     }
@@ -324,8 +330,9 @@ static int initPlayer(FFPlayerContext *context, const char *file) {
     }
     AVCodecContext *codecCtx = avcodec_alloc_context3(context->_avCodec);
     context->_codecCtx = codecCtx;
-    if ((ret = avcodec_parameters_to_context(codecCtx, stream->codecpar)) <
-        0) {
+
+    codecCtx->codec_type = stream->codecpar->codec_type;
+    if ((ret = avcodec_parameters_to_context(codecCtx, stream->codecpar)) < 0) {
         LOGE("Couldn't find stream information. ret=%d\n", ret);
         deinitPlayer(context);
         return ret;

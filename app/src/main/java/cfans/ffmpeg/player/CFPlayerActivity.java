@@ -106,7 +106,7 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
         if (path != null) {
             mPlayer.start(path);
         }else{
-            mPlayer.start("mnt/sdcard/RC-Follow/video/tes.mp4");
+            mPlayer.start("mnt/sdcard/RC-Follow/video/test.mp4");
         }
         mDuration = mPlayer.getDuration();
         mTvDuration.setText(generateTime(mDuration));
