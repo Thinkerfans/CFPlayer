@@ -28,6 +28,11 @@ static void deinitPlayer(FFPlayerContext *context);
 
 static void *playerThread(void *arg);
 
+/**
+ * 截图，保存成BMP或者PPM格式
+ * */
+static void saveFrame(AVFrame* pFrame, int width, int height, const char * path);
+
 int registerPlayer(JNIEnv *env) {
     jclass clazz;
     if ((clazz = (*env)->FindClass(env, "cfans/ffmpeg/player/SilentPlayer")) == NULL
@@ -167,6 +172,19 @@ Java_cfans_ffmpeg_player_SilentPlayer_getCurrentPosition(JNIEnv *env, jobject ob
     return JNI_FALSE;
 }
 
+JNIEXPORT jint JNICALL
+Java_cfans_ffmpeg_player_SilentPlayer_snapshot(JNIEnv *env, jobject obj,jstring path) {
+    FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
+    if (context) {
+        const char *file = (*env)->GetStringUTFChars(env, path, 0);
+        saveFrame(context->_rgbFrame,640,360,file);
+        (*env)->ReleaseStringUTFChars(env, path, file);
+    }
+    return JNI_FALSE;
+}
+
+
+
 
 static void onProgressEvent(FFPlayerContext *context) {
     JNIEnv *env = NULL;
@@ -198,16 +216,17 @@ static void *playerThread(void *arg) {
     ANativeWindow_Buffer windowBuffer;
     AVFrame *pFrame = av_frame_alloc();
     AVFrame *pFrameRGBA = av_frame_alloc();
-    int numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGBA, width, height, 1);
+    context->_rgbFrame = pFrameRGBA;
+    int numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGB24, width, height, 1);
     uint8_t *buffer = (uint8_t *) av_malloc(numBytes * sizeof(uint8_t));
-    av_image_fill_arrays(pFrameRGBA->data, pFrameRGBA->linesize, buffer, AV_PIX_FMT_RGBA, width,
+    av_image_fill_arrays(pFrameRGBA->data, pFrameRGBA->linesize, buffer, AV_PIX_FMT_RGB24, width,
                          height, 1);
     struct SwsContext *sws_ctx = sws_getContext(width,
                                                 height,
                                                 pCodecCtx->pix_fmt,
                                                 width,
                                                 height,
-                                                AV_PIX_FMT_RGBA,
+                                                AV_PIX_FMT_RGB24,
                                                 SWS_FAST_BILINEAR,
                                                 NULL,
                                                 NULL,
@@ -286,6 +305,7 @@ static void *playerThread(void *arg) {
     av_free(pFrameRGBA);
     av_free(pFrame);
 
+    context->_rgbFrame = NULL;
     deinitPlayer(context);
     LOGE("playerThread end");
 }
@@ -373,5 +393,21 @@ static void deinitPlayer(FFPlayerContext *context) {
         if (context->_formatCtx) {
             avformat_close_input(&context->_formatCtx);
         }
+    }
+}
+
+static void saveFrame(AVFrame* pFrame, int width, int height, const char * path)
+{
+    FILE *pFile;
+    pFile = fopen(path, "wb");
+    if(pFile){
+        fprintf(pFile, "P6\n%d %d\n255\n", width, height);
+        for (int y = 0; y < height; y++)
+            fwrite(pFrame->data[0] + y*pFrame->linesize[0], 1, width * 3, pFile);
+
+        fclose(pFile);
+        LOGE("saveFrame success");
+    }else{
+        LOGE("saveFrame error");
     }
 }

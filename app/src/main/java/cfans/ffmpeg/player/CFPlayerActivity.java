@@ -55,6 +55,7 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
             case R.id.controller_play_pause:
                 if (mPlayer.isPlaying()){
                     onVideoPause();
+                    mPlayer.snapshot("mnt/sdcard/RC-Follow/test.ppm");
                 }else{
                     onVideoPlay();
                 }

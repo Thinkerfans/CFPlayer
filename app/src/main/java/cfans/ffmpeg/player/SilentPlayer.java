@@ -40,6 +40,11 @@ public class SilentPlayer {
     public native void seekTo(long index);
 
     /**
+     * 截图
+     */
+    public native int snapshot(String path);
+
+    /**
      * JNI回调进度，大约每秒回调一次
      */
     public void postProgressFromJNI(long index, long total) {

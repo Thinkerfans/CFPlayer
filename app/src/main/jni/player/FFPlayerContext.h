@@ -28,6 +28,7 @@ typedef struct FFPlayerContext {
     AVFormatContext * _formatCtx;
     AVCodecContext *_codecCtx;
     AVCodec * _avCodec;
+    AVFrame * _rgbFrame;
 
     unsigned int _nb_streams; //视频流编号
     unsigned int _frameRate;// 帧率
