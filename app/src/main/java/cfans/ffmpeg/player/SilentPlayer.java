@@ -1,5 +1,6 @@
 package cfans.ffmpeg.player;
 
+import android.graphics.Bitmap;
 import android.os.Handler;
 import android.os.Message;
 import android.util.Log;

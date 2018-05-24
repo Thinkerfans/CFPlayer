@@ -1,5 +1,6 @@
 package cfans.ffmpeg.player;
 
+import android.graphics.Bitmap;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -48,6 +49,7 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
         initViews();
     }
 
+    int count;
     @Override
     public void onClick(View v) {
 
@@ -55,7 +57,6 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
             case R.id.controller_play_pause:
                 if (mPlayer.isPlaying()){
                     onVideoPause();
-                    mPlayer.snapshot("mnt/sdcard/RC-Follow/test.ppm");
                 }else{
                     onVideoPlay();
                 }
@@ -63,6 +64,7 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
             case R.id.surface_view:
                 if (mShowing){
                     hide();
+                    mPlayer.snapshot("mnt/sdcard/Asnapshot/test"+ count++ +".jpg");
                 }else{
                     show();
                 }
@@ -107,7 +109,7 @@ public class CFPlayerActivity extends AppCompatActivity implements SurfaceHolder
         if (path != null) {
             mPlayer.start(path);
         }else{
-            mPlayer.start("mnt/sdcard/RC-Follow/video/test.mp4");
+            mPlayer.start("mnt/sdcard/Asnapshot/video/test.mp4");
         }
         mDuration = mPlayer.getDuration();
         mTvDuration.setText(generateTime(mDuration));

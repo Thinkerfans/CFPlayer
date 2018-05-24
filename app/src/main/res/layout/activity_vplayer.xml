@@ -11,8 +11,8 @@
 
     <include
         android:id="@+id/layout_controller"
-        android:layout_height="wrap_content"
+        layout="@layout/videocontroller"
         android:layout_width="match_parent"
-        android:layout_alignParentBottom="true"
-        layout="@layout/videocontroller"></include>
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"></include>
 </RelativeLayout>

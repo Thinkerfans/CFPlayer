@@ -25,6 +25,7 @@
 typedef struct FFPlayerContext {
 
     jobject _object;
+
     AVFormatContext * _formatCtx;
     AVCodecContext *_codecCtx;
     AVCodec * _avCodec;

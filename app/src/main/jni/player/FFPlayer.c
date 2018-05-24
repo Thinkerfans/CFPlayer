@@ -13,6 +13,7 @@
 #include <libavcodec/jni.h>
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
+#include <android/bitmap.h>
 
 #include "FFPlayerContext.h"
 
@@ -32,6 +33,10 @@ static void *playerThread(void *arg);
  * 截图，保存成BMP或者PPM格式
  * */
 static void saveFrame(AVFrame* pFrame, int width, int height, const char * path);
+static void fillBitmap(AndroidBitmapInfo*  info, void *pixels, AVFrame *pFrame);
+static jobject createBitmap(JNIEnv *env,int width,int height);
+static jboolean saveBitmap(JNIEnv *env,jobject bitmap,jstring path);
+
 
 int registerPlayer(JNIEnv *env) {
     jclass clazz;
@@ -173,18 +178,40 @@ Java_cfans_ffmpeg_player_SilentPlayer_getCurrentPosition(JNIEnv *env, jobject ob
 }
 
 JNIEXPORT jint JNICALL
-Java_cfans_ffmpeg_player_SilentPlayer_snapshot(JNIEnv *env, jobject obj,jstring path) {
+Java_cfans_ffmpeg_player_SilentPlayer_snapshot(JNIEnv *env, jobject obj,jstring path)
+{
     FFPlayerContext *context = (FFPlayerContext *) (*env)->GetLongField(env, obj, gJNIContext);
     if (context) {
-        const char *file = (*env)->GetStringUTFChars(env, path, 0);
-        saveFrame(context->_rgbFrame,640,360,file);
-        (*env)->ReleaseStringUTFChars(env, path, file);
+//        struct timeval tvs, tve;
+//        gettimeofday(&tvs, NULL);
+        AndroidBitmapInfo  info;
+        void*              pixels;
+        int                ret;
+        jobject bitmap = createBitmap(env,context->_codecCtx->width,context->_codecCtx->height);
+        if ((ret = AndroidBitmap_getInfo(env, bitmap, &info)) < 0) {
+            LOGE("AndroidBitmap_getInfo() failed ! error=%d", ret);
+            return JNI_FALSE;
+        }
+
+        if ((ret = AndroidBitmap_lockPixels(env, bitmap, &pixels)) < 0) {
+            LOGE("AndroidBitmap_lockPixels() failed ! error=%d", ret);
+            return JNI_FALSE;
+        }
+        fillBitmap(&info, pixels,context->_rgbFrame);
+        saveBitmap(env,bitmap,path);
+
+        AndroidBitmap_unlockPixels(env, bitmap);
+        (*env)->DeleteLocalRef(env,bitmap);
+//        gettimeofday(&tve, NULL);
+//        long time = (tve.tv_sec - tvs.tv_sec) * AV_TIME_BASE + (tve.tv_usec - tvs.tv_usec);
+//        LOGE("decode time:%d",time);
+//       const char *file = (*env)->GetStringUTFChars(env, path, 0);
+//       saveFrame(context->_rgbFrame,640,360,file);
+//       (*env)->ReleaseStringUTFChars(env, path, file);
+        return JNI_TRUE;
     }
     return JNI_FALSE;
 }
-
-
-
 
 static void onProgressEvent(FFPlayerContext *context) {
     JNIEnv *env = NULL;
@@ -200,7 +227,6 @@ static void onProgressEvent(FFPlayerContext *context) {
                                context->_nb_frames);
         (*jvm)->DetachCurrentThread(jvm);
     }
-
 }
 
 static void *playerThread(void *arg) {
@@ -217,16 +243,16 @@ static void *playerThread(void *arg) {
     AVFrame *pFrame = av_frame_alloc();
     AVFrame *pFrameRGBA = av_frame_alloc();
     context->_rgbFrame = pFrameRGBA;
-    int numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGB24, width, height, 1);
+    int numBytes = av_image_get_buffer_size(AV_PIX_FMT_RGBA, width, height, 1);
     uint8_t *buffer = (uint8_t *) av_malloc(numBytes * sizeof(uint8_t));
-    av_image_fill_arrays(pFrameRGBA->data, pFrameRGBA->linesize, buffer, AV_PIX_FMT_RGB24, width,
+    av_image_fill_arrays(pFrameRGBA->data, pFrameRGBA->linesize, buffer, AV_PIX_FMT_RGBA, width,
                          height, 1);
     struct SwsContext *sws_ctx = sws_getContext(width,
                                                 height,
                                                 pCodecCtx->pix_fmt,
                                                 width,
                                                 height,
-                                                AV_PIX_FMT_RGB24,
+                                                AV_PIX_FMT_RGBA,
                                                 SWS_FAST_BILINEAR,
                                                 NULL,
                                                 NULL,
@@ -410,4 +436,73 @@ static void saveFrame(AVFrame* pFrame, int width, int height, const char * path)
     }else{
         LOGE("saveFrame error");
     }
+}
+
+//static method
+static void fillBitmap(AndroidBitmapInfo*  info, void *pixels, AVFrame *pFrame)
+{
+    uint8_t *frameLine;
+    int  yy;
+    for (yy = 0; yy < info->height; yy++) {
+        uint8_t*  line = (uint8_t*)pixels;
+        frameLine = pFrame->data[0] + (yy * pFrame->linesize[0]);
+
+        int xx;
+        for (xx = 0; xx < info->width; xx++) {
+            int out_offset = xx * 4;
+            int in_offset = xx * 3;
+
+            line[out_offset] = frameLine[in_offset];
+            line[out_offset+1] = frameLine[in_offset+1];
+            line[out_offset+2] = frameLine[in_offset+2];
+            line[out_offset + 3] = 0xff; //主要是A值
+        }
+        pixels = (char*)pixels + info->stride;
+    }
+}
+
+static jobject createBitmap(JNIEnv *env,int width,int height){
+    jstring objFormat = (*env)->NewStringUTF(env,"ARGB_8888");
+    jclass clsConfig = (*env)->FindClass(env,"android/graphics/Bitmap$Config");
+    jmethodID methodValue = (*env)->GetStaticMethodID(env,clsConfig, "valueOf", "(Ljava/lang/String;)Landroid/graphics/Bitmap$Config;");
+
+    jobject objConfig = (*env)->CallStaticObjectMethod(env,clsConfig, methodValue, objFormat);
+    jclass clsBitmap = (jclass)((*env)->FindClass(env,"android/graphics/Bitmap"));
+    jmethodID methodCreate = (*env)->GetStaticMethodID(env,clsBitmap,
+                                           "createBitmap", "(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;");
+
+    jobject bitmap = (*env)->CallStaticObjectMethod(env,clsBitmap,
+                                                    methodCreate, width, height, objConfig);
+    (*env)->DeleteLocalRef(env,objConfig);
+    (*env)->DeleteLocalRef(env,objFormat);
+
+    (*env)->DeleteLocalRef(env,clsConfig);
+    (*env)->DeleteLocalRef(env,clsBitmap);
+    return bitmap;
+}
+
+static jboolean saveBitmap(JNIEnv *env,jobject bitmap,jstring path){
+
+    jclass clsCompress = (*env)->FindClass(env,"android/graphics/Bitmap$CompressFormat");
+    jfieldID fieldCompress = (*env)->GetStaticFieldID(env,clsCompress, "JPEG","Landroid/graphics/Bitmap$CompressFormat;");
+    jobject objCompress = (*env)->GetStaticObjectField(env,clsCompress, fieldCompress);
+
+    jclass clsBitmap = ((*env)->FindClass(env,"android/graphics/Bitmap"));
+    jmethodID methodCompress = (*env)->GetMethodID(env,clsBitmap,"compress","(Landroid/graphics/Bitmap$CompressFormat;ILjava/io/OutputStream;)Z");
+
+    jclass clsStream = ((*env)->FindClass(env,"java/io/FileOutputStream"));
+    jmethodID methodInit = (*env)->GetMethodID(env,clsStream, "<init>","(Ljava/lang/String;)V");
+    jobject objSteam = ((*env)->NewObject(env,clsStream,methodInit,path));
+    jmethodID methodClose = (*env)->GetMethodID(env, clsStream, "close", "()V");
+
+
+    (*env)->CallBooleanMethod(env,bitmap, methodCompress, objCompress, 100, objSteam);
+    (*env)->CallVoidMethod (env, objSteam,methodClose);
+
+    (*env)->DeleteLocalRef(env,clsCompress);
+    (*env)->DeleteLocalRef(env,clsStream);
+
+    (*env)->DeleteLocalRef(env,objCompress);
+    (*env)->DeleteLocalRef(env,objSteam);
+
 }
